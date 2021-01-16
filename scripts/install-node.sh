@@ -1,23 +1,53 @@
 #!/bin/bash
+# (Install Docker CE)
+## Set up the repository:
+### Install packages to allow apt to use a repository over HTTPS
 echo "installing docker"
 apt-get update
 apt-get install -y \
     apt-transport-https \
     ca-certificates \
     curl \
-    software-properties-common
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+    software-properties-common gnupg2
+# Add Docker's official GPG key:
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key --keyring /etc/apt/trusted.gpg.d/docker.gpg add -
+# Add the Docker apt repository:
 add-apt-repository \
-   "deb https://download.docker.com/linux/$(. /etc/os-release; echo "$ID") \
+   "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
    $(lsb_release -cs) \
    stable"
-apt-get update && apt-get install -y docker-ce=$(apt-cache madison docker-ce | grep 17.03 | head -1 | awk '{print $3}')
-
+# Install Docker CE
+apt-get update && apt-get install -y \
+  containerd.io=1.2.13-2 \
+  docker-ce=5:19.03.11~3-0~ubuntu-$(lsb_release -cs) \
+  docker-ce-cli=5:19.03.11~3-0~ubuntu-$(lsb_release -cs)	
+## Create /etc/docker
+sudo mkdir /etc/docker
+# Set up the Docker daemon
+cat <<EOF | sudo tee /etc/docker/daemon.json
+{
+  "exec-opts": ["native.cgroupdriver=systemd"],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "100m"
+  },
+  "storage-driver": "overlay2"
+}
+EOF
+# Create /etc/systemd/system/docker.service.d
+sudo mkdir -p /etc/systemd/system/docker.service.d
+# Restart Docker
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+# Enable Docker to start on boot
+sudo systemctl enable docker
+# Install kubeadm kubelet kubectl
 echo "installing kubeadm and kubectl"
-apt-get update && apt-get install -y apt-transport-https
-curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
-cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
+apt-get update && apt-get install -y apt-transport-https curl
+curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+cat <<EOF | sudo tee  >/etc/apt/sources.list.d/kubernetes.list
 deb http://apt.kubernetes.io/ kubernetes-xenial main
 EOF
-apt-get update
-apt-get install -y kubelet kubeadm kubectl
+sudo apt-get update
+sudo apt-get install -y kubelet kubeadm kubectl
+sudo apt-mark hold kubelet kubeadm kubectl
